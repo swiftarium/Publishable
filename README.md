@@ -1,44 +1,90 @@
 # Publishable
 
-A Swift property wrapper that enables easy property observation for classes. With Publishable, any object can subscribe to property changes and be notified when those changes occur.
+`Publishable` is a property wrapper designed to allow subscribers to listen for changes to a property, and be notified when changes occur. It's particularly useful when you want to implement reactive programming patterns, such as those seen in frameworks like Combine.
+
+## Features
+
+- Observes properties for changes.
+- Notifies subscribers when a property changes.
+- Supports both class-based subscribers and simple subscribers.
+- Clears out deallocated class-based subscriptions automatically.
 
 ## Installation
 
 ### Swift Package Manager
 
-To integrate `Publishable` into your Xcode project using SPM, add it to the dependencies value of your Package.swift:
+To install `Publishable` into your Xcode project using SPM, add it to the dependencies value of your Package.swift:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/jinyongp/Publishable.git", from: "1.0.0"),
+    .package(url: "https://github.com/jinyongp/Publishable.git", from: "1.1.0"),
 ]
 ```
 
 ## Usage
 
-Using Publishable is straightforward:
+### Basic Usage
 
-1. Annotate the property you want to observe with @Publishable.
-2. Subscribe to changes on that property.
-3. (Optional) unsubscribe when you no longer want to observe changes.
+Declare a property using the @Publishable property wrapper to make it observable:
 
-**Examples**
+```swift 
+class MyModel {
+    @Publishable var count: Int = 0
+}
+```
+
+### Subscribing to Changes
+
+You can subscribe to changes in two ways:
+
+1. With a subscriber object:
 
 ```swift
-import Publishable
+let model = MyModel()
 
-class Model {
-    @Publishable var count = 0
+class SubscriberClass {
+    init() {
+        model.$count.subscribe(by: self) { subscriber, changes in
+            print("Count changed from \(changes.old) to \(changes.new)")
+        }
+    }
 }
 
-let model = Model()
+let subscriber = SubscriberClass()
 
-// Subscribe to changes
-model.$count.subscribe(by: self) { (subscriber, changes) in
+model.count = 5  // This will print: "Count changed from 0 to 5"
+```
+
+2. Using with a simple token for unsubscribes:
+
+```swift
+let token = model.$count.subscribe { changes in
     print("Count changed from \(changes.old) to \(changes.new)")
 }
 
-model.count = 5  // This will print: "Count changed from 0 to 5"
+model.count = 10  // This will print: "Count changed from 5 to 10"
+```
+
+### Unsubscribing
+
+1. By a subscriber object:
+
+```swift
+model.$count.unsubscribe(by: subscriber)
+```
+
+2. Using a token:
+
+```swift
+model.$count.unsubscribe(token: token)
+```
+
+### Publishing Changes:
+
+If you want to manually notify all subscribers of a change (e.g., for events or updates that aren't related to the property value):
+
+```swift
+model.$count.publish()  // Notifies subscribers with the current value
 ```
 
 ## Test

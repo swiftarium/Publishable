@@ -1,46 +1,37 @@
 import Foundation
 
-/// A property wrapper that allows objects to subscribe to property changes.
+/// `Publishable` allows you to observe changes on properties.
+///
+/// Example:
 /// ```
-/// class Model {
-///     @Publishable var count = 0
+/// class ExampleModel {
+///     @Publishable var value: Int = 0
 /// }
 ///
-/// let model = Model()
-/// model.$count.subscribe(by: self) { (self, changes) in
-///     print("Count changed from \(changes.old) to \(changes.new)")
+/// let model = ExampleModel()
+///
+/// model.$value.subscribe { changes in
+///     print("Value changed from \(changes.old) to \(changes.new)")
 /// }
 ///
-/// model.count = 5  // Outputs: "Count changed from 0 to 5"
+/// model.value = 5  // This will print: "Value changed from 0 to 5"
 /// ```
 @propertyWrapper
-final class Publishable<Property> {
-    /// Represents a change in property values.
+final class Publishable<Property> where Property: Equatable {
     typealias Changes = (old: Property, new: Property)
-
-    /// Callback type that gets invoked when a property changes.
-    /// - Parameters:
-    ///   - subscriber: The object that subscribed to the changes.
-    ///   - changes: The old and new property values.
     typealias Callback<Subscriber: AnyObject> = ((subscriber: Subscriber, changes: Changes)) -> Void
     typealias AnyCallback = ((subscriber: AnyObject?, changes: Changes)) -> Void
-
     typealias SubscriptionToken = UUID
 
-    /// A structure that holds a weak reference to an object of type `T`.
     private struct WeakRef<T: AnyObject> {
         weak var value: T?
-
         var isAlive: Bool { value != nil }
 
-        /// Initializes a new weak reference.
-        /// - Parameter value: The object to be weakly referenced.
         init(_ value: T?) {
             self.value = value
         }
     }
 
-    /// Represents a subscription to the property changes.
     private struct Subscription<Subscriber: AnyObject> {
         let token: SubscriptionToken?
         let subscriber: WeakRef<Subscriber>
@@ -50,89 +41,141 @@ final class Publishable<Property> {
     private var value: Property
     private var subscriptions: [Subscription<AnyObject>] = []
 
-    private var queue = DispatchQueue(label: "com.publishable.queue", attributes: .concurrent)
-    private func read<T>(_ action: () -> T) -> T { queue.sync { action() } }
-    private func write<T>(_ action: () -> T) -> T { queue.sync(flags: .barrier) { action() } }
-
     var projectedValue: Publishable { self }
     var wrappedValue: Property {
-        get { read { value } }
-        set {
-            let oldValue = value
-            value = newValue
-            publish((oldValue, newValue))
-        }
+        get { value }
+        set { updateValue(newValue) }
     }
 
-    /// Initializes the property with an initial value.
-    /// - Parameter wrappedValue: The initial value of the property.
-    init(wrappedValue: Property) {
-        self.value = wrappedValue
-    }
+    init(wrappedValue: Property) { self.value = wrappedValue }
 
-    /// Subscribes an object to be notified of property changes.
+    /// Subscribe to changes using an object.
     /// - Parameters:
-    ///   - subscriber: The object that wants to be notified of changes.
-    ///   - immediate: If `true`, the callback will be called immediately with the current value.
-    ///   - callback: The function to call when the property changes.
+    ///   - subscriber: The object subscribing to the changes.
+    ///   - immediate: If true, immediately calls the callback with the current value.
+    ///   - callback: The function to be called when the property changes.
+    ///
+    /// Example:
+    /// ```
+    /// class ExampleModel {
+    ///     @Publishable var value: Int = 0
+    /// }
+    ///
+    /// let model = ExampleModel()
+    ///
+    /// class ExampleSubscriber {
+    ///     init() {
+    ///         model.$value.subscribe(by: self) { (subscriber, changes) in
+    ///             print("Value changed from \(changes.old) to \(changes.new)")
+    ///         }
+    ///     }
+    /// }
+    ///
+    /// let subscriber = ExampleSubscriber()
+    ///
+    /// model.value = 5  // This will print: "Value changed from 0 to 5"
+    /// ```
     func subscribe<Subscriber: AnyObject>(
         by subscriber: Subscriber,
         immediate: Bool = false,
         _ callback: @escaping Callback<Subscriber>
     ) {
-        write {
-            let anyCallback: AnyCallback = { args in
-                callback((args.subscriber as! Subscriber, args.changes))
+        let anyCallback: AnyCallback = { args in
+            if let subscriber = args.subscriber as? Subscriber {
+                callback((subscriber, args.changes))
             }
-            subscriptions.append(.init(
-                token: nil,
-                subscriber: .init(subscriber),
-                callback: anyCallback
-            ))
-            if immediate { callback((subscriber, (value, value))) }
         }
+        let subscription: Subscription<AnyObject> = Subscription(
+            token: nil,
+            subscriber: .init(subscriber),
+            callback: anyCallback
+        )
+        subscriptions.append(subscription)
+        if immediate { callback((subscriber, (value, value))) }
     }
 
+    /// Subscribe to changes.
+    /// - Parameters:
+    ///   - immediate: If true, immediately calls the callback with the current value.
+    ///   - callback: The function to be called when the property changes.
+    /// - Returns: A token representing the subscription, useful for unsubscribing.
+    ///
+    /// Example:
+    /// ```
+    /// class ExampleModel {
+    ///     @Publishable var value: Int = 0
+    /// }
+    ///
+    /// let model = ExampleModel()
+    ///
+    /// let token = model.$value.subscribe { changes in
+    ///     print("Value changed from \(changes.old) to \(changes.new)")
+    /// }
+    ///
+    /// model.value = 5  // This will print: "Value changed from 0 to 5"
+    /// ```
     @discardableResult
     func subscribe(
         immediate: Bool = false,
         _ callback: @escaping (_ changes: Changes) -> Void
     ) -> SubscriptionToken {
-        write {
-            let anyCallback: AnyCallback = { args in
-                callback(args.changes)
-            }
-            let token = SubscriptionToken()
-            subscriptions.append(.init(
-                token: token,
-                subscriber: .init(nil),
-                callback: anyCallback
-            ))
-            if immediate { callback((value, value)) }
-            return token
+        let anyCallback: AnyCallback = { args in callback(args.changes) }
+        let subscription: Subscription<AnyObject> = Subscription(
+            token: SubscriptionToken(),
+            subscriber: .init(nil),
+            callback: anyCallback
+        )
+        subscriptions.append(subscription)
+        if immediate { callback((value, value)) }
+        return subscription.token!
+    }
+
+    /// Unsubscribe using an object.
+    /// - Parameter subscriber: The subscriber to unsubscribe.
+    ///
+    /// Example:
+    /// ```
+    /// model.$value.unsubscribe(by: subscriber)
+    /// ```
+    func unsubscribe<Subscriber: AnyObject>(by subscriber: Subscriber) {
+        subscriptions.removeAll { !$0.subscriber.isAlive || $0.subscriber.value === subscriber }
+    }
+
+    /// Unsubscribe using a token.
+    /// - Parameter token: The token for unsubscribing.
+    ///
+    /// Example:
+    /// ```
+    /// model.$value.unsubscribe(token: token)
+    /// ```
+    func unsubscribe(token: SubscriptionToken) {
+        subscriptions.removeAll { !$0.subscriber.isAlive || $0.token == token }
+    }
+
+    /// Notify subscribers.
+    /// - Parameter changes: The changes to publish. If not provided, the current value is used.
+    ///
+    /// Example:
+    /// ```
+    /// model.$value.publish()  // Notifies subscribers with the current value
+    /// ```
+    func publish(_ changes: Changes? = nil) {
+        let (old, new) = changes ?? (value, value)
+        subscriptions = subscriptions.filter { subscription in
+            guard subscription.subscriber.isAlive || subscription.token != nil else { return false }
+            subscription.callback((subscription.subscriber.value, (old, new)))
+            return true
         }
     }
 
-    /// Unsubscribes an object so it will no longer be notified of property changes.
-    /// - Parameter subscriber: The object to unsubscribe.
-    func unsubscribe<Subscriber: AnyObject>(by subscriber: Subscriber) {
-        write { subscriptions.removeAll { !$0.subscriber.isAlive || $0.subscriber.value === subscriber } }
-    }
-
-    func unsubscribe(token: SubscriptionToken) {
-        write { subscriptions.removeAll { !$0.subscriber.isAlive || $0.token == token } }
-    }
-
-    /// Publishes changes to all subscribers.
-    /// - Parameter changes: Optional specific changes to publish. If nil, uses current value for both old and new.
-    func publish(_ changes: Changes? = nil) {
-        write {
-            let (old, new) = changes ?? (value, value)
-            subscriptions = subscriptions.compactMap { subscription in
-                guard subscription.subscriber.isAlive || subscription.token != nil else { return nil }
-                subscription.callback((subscription.subscriber.value, (old, new)))
-                return subscription
-            }
+    private func updateValue(_ newValue: Property) {
+        let changesToPublish: Changes? = {
+            guard value != newValue else { return nil }
+            defer { value = newValue }
+            return (value, newValue)
+        }()
+        if let changes = changesToPublish {
+            publish(changes)
         }
     }
 }
