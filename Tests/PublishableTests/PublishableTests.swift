@@ -3,6 +3,7 @@ import XCTest
 
 private struct Model {
     @Publishable var value: String
+    @Publishable var count: Int = 0
 }
 
 private final class Subscriber {
@@ -32,6 +33,20 @@ final class PublishableTests: XCTestCase {
         
         XCTAssertEqual(receivedOldValue, oldValue)
         XCTAssertEqual(receivedNewValue, newValue)
+    }
+    
+    func testMultipleSubscribers() {
+        let model = Model(value: "Multiple")
+        var count1 = 0
+        var count2 = 0
+
+        model.$count.subscribe(by: self) { _, _ in count1 += 1 }
+        model.$count.subscribe(by: self) { _, _ in count2 += 1 }
+
+        model.count = 5
+
+        XCTAssertEqual(count1, 1)
+        XCTAssertEqual(count2, 1)
     }
     
     func testImmediateSubscription() {
@@ -84,5 +99,41 @@ final class PublishableTests: XCTestCase {
         model.value = "NewValue"
         
         XCTAssertEqual(subscribers, ["Subscriber 2"])
+    }
+
+    func testThreadSafety() {
+        let oldValue = "OldValue"
+        let newValue = "NewValue"
+        let model = Model(value: oldValue)
+            
+        let expectation = self.expectation(description: "Thread Safety")
+        let dispatchGroup = DispatchGroup()
+
+        var receivedValues: [String] = []
+
+        model.$value.subscribe(by: self) { _, changes in
+            receivedValues.append(changes.new)
+        }
+
+        DispatchQueue.global(qos: .background).async(group: dispatchGroup) {
+            for _ in 0..<100 {
+                model.value = newValue
+            }
+        }
+
+        DispatchQueue.global(qos: .utility).async(group: dispatchGroup) {
+            for _ in 0..<100 {
+                model.value = oldValue
+            }
+        }
+
+        dispatchGroup.notify(queue: .main) {
+            expectation.fulfill()
+        }
+
+        wait(for: [expectation], timeout: 10.0)
+
+        // Expect that 200 changes have been received
+        XCTAssertEqual(receivedValues.count, 200)
     }
 }

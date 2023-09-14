@@ -1,4 +1,18 @@
+import Foundation
+
 /// A property wrapper that allows objects to subscribe to property changes.
+/// ```
+/// class Model {
+///     @Publishable var count = 0
+/// }
+///
+/// let model = Model()
+/// model.$count.subscribe(by: self) { (self, changes) in
+///     print("Count changed from \(changes.old) to \(changes.new)")
+/// }
+///
+/// model.count = 5  // Outputs: "Count changed from 0 to 5"
+/// ```
 @propertyWrapper
 final class Publishable<Property> {
     /// Represents a change in property values.
@@ -30,12 +44,13 @@ final class Publishable<Property> {
     private var value: Property
     private var subscriptions: [Subscription<AnyObject>] = []
 
-    /// Access to the `Publishable` instance for more advanced operations like subscribing and unsubscribing.
-    var projectedValue: Publishable { self }
+    private var queue = DispatchQueue(label: "com.publishable.queue", attributes: .concurrent)
+    private func read<T>(_ action: () -> T) -> T { queue.sync { action() } }
+    private func write(_ action: () -> Void) { queue.sync(flags: .barrier) { action() } }
 
-    /// The property's value. Setting this will notify any subscribers of the change.
+    var projectedValue: Publishable { self }
     var wrappedValue: Property {
-        get { value }
+        get { read { value } }
         set {
             let oldValue = value
             value = newValue
@@ -59,27 +74,33 @@ final class Publishable<Property> {
         immediate: Bool = false,
         _ callback: @escaping Callback<Subscriber>
     ) {
-        let anyCallback: Callback<AnyObject> = { args in
-            callback((args.subscriber as! Subscriber, args.changes))
+        write {
+            let anyCallback: Callback<AnyObject> = { args in
+                callback((args.subscriber as! Subscriber, args.changes))
+            }
+            subscriptions.append(.init(callback: anyCallback, subscriber: .init(subscriber)))
+            if immediate { callback((subscriber, (value, value))) }
         }
-        subscriptions.append(.init(callback: anyCallback, subscriber: .init(subscriber)))
-        if immediate { callback((subscriber, (value, value))) }
     }
 
     /// Unsubscribes an object so it will no longer be notified of property changes.
     /// - Parameter subscriber: The object to unsubscribe.
     func unsubscribe<Subscriber: AnyObject>(by subscriber: Subscriber) {
-        subscriptions.removeAll { $0.subscriber.value == nil || $0.subscriber.value === subscriber }
+        write {
+            subscriptions.removeAll { $0.subscriber.value == nil || $0.subscriber.value === subscriber }
+        }
     }
 
     /// Publishes changes to all subscribers.
     /// - Parameter changes: Optional specific changes to publish. If nil, uses current value for both old and new.
     func publish(_ changes: Changes? = nil) {
-        let (old, new) = changes ?? (value, value)
-        subscriptions = subscriptions.compactMap { subscription in
-            guard let subscriber = subscription.subscriber.value else { return nil }
-            subscription.callback((subscriber, (old, new)))
-            return subscription
+        write {
+            let (old, new) = changes ?? (value, value)
+            subscriptions = subscriptions.compactMap { subscription in
+                guard let subscriber = subscription.subscriber.value else { return nil }
+                subscription.callback((subscriber, (old, new)))
+                return subscription
+            }
         }
     }
 }
