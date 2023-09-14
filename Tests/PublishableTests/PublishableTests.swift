@@ -1,111 +1,171 @@
 @testable import Publishable
 import XCTest
 
-private struct Model {
-    @Publishable var value: String
-    @Publishable var count: Int = 0
-}
-
-private final class Subscriber {
-    let name: String
-
-    init(name: String) {
-        self.name = name
-    }
-}
-
 final class PublishableTests: XCTestCase {
-    func testValueChangeNotifiesSubscriber() {
-        let oldValue = "OldValue"
-        let newValue = "NewValue"
-        
-        var receivedOldValue: String?
-        var receivedNewValue: String?
-        
-        let model = Model(value: oldValue)
-        
+    private struct TestModel {
+        @Publishable var value: String
+        @Publishable var count: Int = 0
+    }
+
+    private final class TestSubscriber {
+        let name: String
+
+        init(name: String) {
+            self.name = name
+        }
+    }
+
+    func testSubscribe() {
+        let oldValue = "Old Value"
+        let newValue = "New Value"
+        let model = TestModel(value: oldValue)
+
+        let expectation = self.expectation(
+            description: "subscribe"
+        )
+        expectation.expectedFulfillmentCount = 2
+
+        model.$value.subscribe { changes in
+            XCTAssertEqual(changes.old, oldValue)
+            XCTAssertEqual(changes.new, newValue)
+            expectation.fulfill()
+        }
+
         model.$value.subscribe(by: self) { _, changes in
-            receivedOldValue = changes.old
-            receivedNewValue = changes.new
+            XCTAssertEqual(changes.old, oldValue)
+            XCTAssertEqual(changes.new, newValue)
+            expectation.fulfill()
         }
-        
+
+        model.value = "New Value"
+        waitForExpectations(timeout: 1.0)
+    }
+
+    func testMultipleSubscribes() {
+        let oldValue = "Old Value"
+        let newValue = "New Value"
+        let model = TestModel(value: oldValue)
+
+        for i in 0 ..< 100 {
+            let expectation = self.expectation(
+                description: "multiple subscribes (\(i))"
+            )
+            expectation.expectedFulfillmentCount = 2
+
+            model.$value.subscribe { changes in
+                XCTAssertEqual(changes.old, oldValue)
+                XCTAssertEqual(changes.new, newValue)
+                expectation.fulfill()
+            }
+
+            model.$value.subscribe(by: self) { _, changes in
+                XCTAssertEqual(changes.old, oldValue)
+                XCTAssertEqual(changes.new, newValue)
+                expectation.fulfill()
+            }
+        }
+
         model.value = newValue
-        
-        XCTAssertEqual(receivedOldValue, oldValue)
-        XCTAssertEqual(receivedNewValue, newValue)
+        waitForExpectations(timeout: 1.0)
     }
-    
-    func testMultipleSubscribers() {
-        let model = Model(value: "Multiple")
-        var count1 = 0
-        var count2 = 0
 
-        model.$count.subscribe(by: self) { _, _ in count1 += 1 }
-        model.$count.subscribe(by: self) { _, _ in count2 += 1 }
+    func testSubscribeWithImmediate() {
+        let oldValue = "Old Value"
+        let newValue = "New Value"
+        let model = TestModel(value: oldValue)
 
-        model.count = 5
+        let expectation = self.expectation(description: "subscribe with immediate")
+        expectation.expectedFulfillmentCount = 4
 
-        XCTAssertEqual(count1, 1)
-        XCTAssertEqual(count2, 1)
-    }
-    
-    func testImmediateSubscription() {
-        let oldValue = "Value"
-        let model = Model(value: oldValue)
-        
-        var receivedValue: String?
-        
+        var immediate1 = true
         model.$value.subscribe(by: self, immediate: true) { _, changes in
-            receivedValue = changes.new
+            if immediate1 {
+                XCTAssertEqual(changes.old, oldValue)
+                XCTAssertEqual(changes.new, oldValue)
+                immediate1 = false
+            } else {
+                XCTAssertEqual(changes.old, oldValue)
+                XCTAssertEqual(changes.new, newValue)
+            }
+
+            expectation.fulfill()
         }
-        
-        XCTAssertEqual(receivedValue, oldValue)
-    }
-    
-    func testUnsubscribePreventsNotification() {
-        let oldValue = "OldValue"
-        let newValue = "NewValue"
-        let model = Model(value: oldValue)
-        
-        var didReceiveChange = false
-        
-        model.$value.subscribe(by: self) { _, _ in
-            didReceiveChange = true
+
+        var immediate2 = true
+        model.$value.subscribe(immediate: true) { changes in
+            if immediate2 {
+                XCTAssertEqual(changes.old, oldValue)
+                XCTAssertEqual(changes.new, oldValue)
+                immediate2 = false
+            } else {
+                XCTAssertEqual(changes.old, oldValue)
+                XCTAssertEqual(changes.new, newValue)
+            }
+
+            expectation.fulfill()
         }
-        
-        model.$value.unsubscribe(by: self)
-        
+
         model.value = newValue
-        
-        XCTAssertFalse(didReceiveChange)
+        waitForExpectations(timeout: 1.0)
     }
-    
-    func testWeakRefRelease() {
-        let model = Model(value: "OldValue")
-        
-        var subscriber1: Subscriber? = Subscriber(name: "Subscriber 1")
-        let subscriber2: Subscriber? = Subscriber(name: "Subscriber 2")
-        var subscriber3: Subscriber? = Subscriber(name: "Subscriber 3")
-        
-        var subscribers: [String] = []
-        
-        model.$value.subscribe(by: subscriber1!) { subscribers.append($0.subscriber.name) }
-        model.$value.subscribe(by: subscriber2!) { subscribers.append($0.subscriber.name) }
-        model.$value.subscribe(by: subscriber3!) { subscribers.append($0.subscriber.name) }
-        
+
+    func testUnsubscribe() {
+        let oldValue = "Old Value"
+        let newValue = "New Value"
+        let model = TestModel(value: oldValue)
+
+        let token = model.$value.subscribe { _ in
+            XCTFail("Callback should not be called after unsubscribe")
+        }
+
+        model.$value.subscribe(by: self) { _, _ in
+            XCTFail("Callback should not be called after unsubscribe")
+        }
+
+        model.$value.unsubscribe(token: token)
+        model.$value.unsubscribe(by: self)
+
+        model.value = newValue
+        sleep(1)
+    }
+
+    func testWeakReferences() {
+        let oldValue = "Old Value"
+        let newValue = "New Value"
+        let model = TestModel(value: oldValue)
+
+        var subscriber1: TestSubscriber? = TestSubscriber(name: "Subscriber 1")
+        let subscriber2: TestSubscriber? = TestSubscriber(name: "Subscriber 2")
+        var subscriber3: TestSubscriber? = TestSubscriber(name: "Subscriber 3")
+
+        let expectation = self.expectation(
+            description: "Callback should be called if object still alive"
+        )
+
+        model.$value.subscribe(by: subscriber1!) { _, _ in
+            XCTFail("Callback should not be called after object is released")
+        }
+        model.$value.subscribe(by: subscriber2!) { subscriber, _ in
+            XCTAssertIdentical(subscriber, subscriber2)
+            expectation.fulfill()
+        }
+        model.$value.subscribe(by: subscriber3!) { _, _ in
+            XCTFail("Callback should not be called after object is released")
+        }
+
         subscriber1 = nil
         subscriber3 = nil
-        
-        model.value = "NewValue"
-        
-        XCTAssertEqual(subscribers, ["Subscriber 2"])
+
+        model.value = newValue
+
+        waitForExpectations(timeout: 1.0)
     }
 
     func testThreadSafety() {
-        let oldValue = "OldValue"
-        let newValue = "NewValue"
-        let model = Model(value: oldValue)
-            
+        let oldValue = "Old Value"
+        let newValue = "New Value"
+        let model = TestModel(value: oldValue)
+
         let expectation = self.expectation(description: "Thread Safety")
         let dispatchGroup = DispatchGroup()
 
@@ -115,14 +175,18 @@ final class PublishableTests: XCTestCase {
             receivedValues.append(changes.new)
         }
 
+        model.$value.subscribe { changes in
+            receivedValues.append(changes.new)
+        }
+
         DispatchQueue.global(qos: .background).async(group: dispatchGroup) {
-            for _ in 0..<100 {
+            for _ in 0 ..< 100 {
                 model.value = newValue
             }
         }
 
         DispatchQueue.global(qos: .utility).async(group: dispatchGroup) {
-            for _ in 0..<100 {
+            for _ in 0 ..< 100 {
                 model.value = oldValue
             }
         }
@@ -134,6 +198,6 @@ final class PublishableTests: XCTestCase {
         wait(for: [expectation], timeout: 10.0)
 
         // Expect that 200 changes have been received
-        XCTAssertEqual(receivedValues.count, 200)
+        XCTAssertEqual(receivedValues.count, 400)
     }
 }
