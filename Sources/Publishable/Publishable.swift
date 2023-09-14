@@ -17,11 +17,11 @@ import Foundation
 /// model.value = 5  // This will print: "Value changed from 0 to 5"
 /// ```
 @propertyWrapper
-final class Publishable<Property> where Property: Equatable {
-    typealias Changes = (old: Property, new: Property)
-    typealias Callback<Subscriber: AnyObject> = ((subscriber: Subscriber, changes: Changes)) -> Void
-    typealias AnyCallback = ((subscriber: AnyObject?, changes: Changes)) -> Void
-    typealias SubscriptionToken = UUID
+public final class Publishable<Property> where Property: Equatable {
+    public typealias Changes = (old: Property, new: Property)
+    public typealias Callback<Subscriber: AnyObject> = ((subscriber: Subscriber, changes: Changes)) -> Void
+    public typealias AnyCallback = ((subscriber: AnyObject?, changes: Changes)) -> Void
+    public typealias SubscriptionToken = UUID
 
     private struct WeakRef<T: AnyObject> {
         weak var value: T?
@@ -41,13 +41,13 @@ final class Publishable<Property> where Property: Equatable {
     private var value: Property
     private var subscriptions: [Subscription<AnyObject>] = []
 
-    var projectedValue: Publishable { self }
-    var wrappedValue: Property {
+    public var projectedValue: Publishable { self }
+    public var wrappedValue: Property {
         get { value }
         set { updateValue(newValue) }
     }
 
-    init(wrappedValue: Property) { self.value = wrappedValue }
+    public init(wrappedValue: Property) { self.value = wrappedValue }
 
     /// Subscribe to changes using an object.
     /// - Parameters:
@@ -75,7 +75,7 @@ final class Publishable<Property> where Property: Equatable {
     ///
     /// model.value = 5  // This will print: "Value changed from 0 to 5"
     /// ```
-    func subscribe<Subscriber: AnyObject>(
+    public func subscribe<Subscriber: AnyObject>(
         by subscriber: Subscriber,
         immediate: Bool = false,
         _ callback: @escaping Callback<Subscriber>
@@ -115,7 +115,7 @@ final class Publishable<Property> where Property: Equatable {
     /// model.value = 5  // This will print: "Value changed from 0 to 5"
     /// ```
     @discardableResult
-    func subscribe(
+    public func subscribe(
         immediate: Bool = false,
         _ callback: @escaping (_ changes: Changes) -> Void
     ) -> SubscriptionToken {
@@ -137,7 +137,7 @@ final class Publishable<Property> where Property: Equatable {
     /// ```
     /// model.$value.unsubscribe(by: subscriber)
     /// ```
-    func unsubscribe<Subscriber: AnyObject>(by subscriber: Subscriber) {
+    public func unsubscribe<Subscriber: AnyObject>(by subscriber: Subscriber) {
         subscriptions.removeAll { !$0.subscriber.isAlive || $0.subscriber.value === subscriber }
     }
 
@@ -148,7 +148,7 @@ final class Publishable<Property> where Property: Equatable {
     /// ```
     /// model.$value.unsubscribe(token: token)
     /// ```
-    func unsubscribe(token: SubscriptionToken) {
+    public func unsubscribe(token: SubscriptionToken) {
         subscriptions.removeAll { !$0.subscriber.isAlive || $0.token == token }
     }
 
@@ -159,7 +159,7 @@ final class Publishable<Property> where Property: Equatable {
     /// ```
     /// model.$value.publish()  // Notifies subscribers with the current value
     /// ```
-    func publish(_ changes: Changes? = nil) {
+    public func publish(_ changes: Changes? = nil) {
         let (old, new) = changes ?? (value, value)
         subscriptions = subscriptions.filter { subscription in
             guard subscription.subscriber.isAlive || subscription.token != nil else { return false }
