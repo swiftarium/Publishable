@@ -76,7 +76,7 @@ model.$count.unsubscribe(by: subscriber)
 2. Using a token:
 
 ```swift
-model.$count.unsubscribe(token: token)
+model.$count.unsubscribe(by: token)
 ```
 
 ### Publishing Changes:

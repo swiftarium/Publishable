@@ -124,7 +124,7 @@ final class PublishableTests: XCTestCase {
             XCTFail("Callback should not be called after unsubscribe")
         }
 
-        model.$string.unsubscribe(token: token)
+        model.$string.unsubscribe(by: token)
         model.$string.unsubscribe(by: self)
 
         model.string = newValue
@@ -138,11 +138,11 @@ final class PublishableTests: XCTestCase {
         let token = model.$string.subscribe { _ in }
 
         model.$string.unsubscribe(by: self)
-        model.$string.unsubscribe(token: token)
+        model.$string.unsubscribe(by: token)
 
         // Double unsubscribe shouldn't crash or produce any side effects
         model.$string.unsubscribe(by: self)
-        model.$string.unsubscribe(token: token)
+        model.$string.unsubscribe(by: token)
     }
 
     func testComplexPropertyTypes() {

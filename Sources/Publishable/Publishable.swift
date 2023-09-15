@@ -137,7 +137,7 @@ public final class Publishable<Property> where Property: Equatable {
     /// ```
     /// model.$value.unsubscribe(by: subscriber)
     /// ```
-    public func unsubscribe<Subscriber: AnyObject>(by subscriber: Subscriber) {
+    public func unsubscribe(by subscriber: AnyObject) {
         subscriptions.removeAll { !$0.subscriber.isAlive || $0.subscriber.value === subscriber }
     }
 
@@ -146,9 +146,9 @@ public final class Publishable<Property> where Property: Equatable {
     ///
     /// Example:
     /// ```
-    /// model.$value.unsubscribe(token: token)
+    /// model.$value.unsubscribe(by: token)
     /// ```
-    public func unsubscribe(token: SubscriptionToken) {
+    public func unsubscribe(by token: SubscriptionToken) {
         subscriptions.removeAll { !$0.subscriber.isAlive || $0.token == token }
     }
 
