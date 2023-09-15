@@ -1,3 +1,5 @@
+import WeakRef
+
 /// `Publishable` allows you to observe changes on properties.
 ///
 /// Example:
@@ -176,6 +178,6 @@ public final class Publishable<Property> where Property: Equatable {
     }
 
     private func isValid(subscription: Subscription<AnyObject>) -> Bool {
-        return subscription.subscriber.value != nil || subscription.token != nil
+        return subscription.subscriber.hasValue || subscription.token != nil
     }
 }
