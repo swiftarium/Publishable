@@ -134,7 +134,7 @@ final class PublishableTests: XCTestCase {
     func testMultipleUnsubscribes() {
         let model = TestModel(string: "Initial")
 
-        model.$string.subscribe(by: self) { _ in }
+        model.$string.subscribe(by: self) { _, _ in }
         let token = model.$string.subscribe { _ in }
 
         model.$string.unsubscribe(by: self)
@@ -165,16 +165,16 @@ final class PublishableTests: XCTestCase {
         model.dict.updateValue("value", forKey: "key")
         waitForExpectations(timeout: 1.0)
     }
-    
+
     func testValueNotChanged() {
         let initial = "Not Changed"
         let model = TestModel(string: initial)
 
-        model.$string.subscribe { changes in
+        model.$string.subscribe { _ in
             XCTFail("Callback should be not called without changing value")
         }
-        
-        model.$string.subscribe(by: self) { _, changes in
+
+        model.$string.subscribe(by: self) { _, _ in
             XCTFail("Callback should be not called without changing value")
         }
 
@@ -195,14 +195,14 @@ final class PublishableTests: XCTestCase {
             description: "Callback should be called if object still alive"
         )
 
-        model.$string.subscribe(by: subscriber1!) { _, _ in
+        model.$string.subscribe(by: subscriber1) { _, _ in
             XCTFail("Callback should not be called after object is released")
         }
-        model.$string.subscribe(by: subscriber2!) { subscriber, _ in
+        model.$string.subscribe(by: subscriber2) { subscriber, _ in
             XCTAssertIdentical(subscriber, subscriber2)
             expectation.fulfill()
         }
-        model.$string.subscribe(by: subscriber3!) { _, _ in
+        model.$string.subscribe(by: subscriber3) { _, _ in
             XCTFail("Callback should not be called after object is released")
         }
 
