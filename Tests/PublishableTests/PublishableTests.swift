@@ -131,6 +131,58 @@ final class PublishableTests: XCTestCase {
         sleep(1)
     }
 
+    func testUnsubscribeOnlyWithObject() {
+        let oldValue = "Old Value"
+        let newValue = "New Value"
+        let model = TestModel(string: oldValue)
+
+        let expectation = self.expectation(
+            description: "Callback should be called"
+        )
+
+        model.$string.subscribe { payload in
+            XCTAssertEqual(payload.old, oldValue)
+            XCTAssertEqual(payload.new, newValue)
+            expectation.fulfill()
+        }
+
+        model.$string.subscribe(by: self) { _, _ in
+            XCTFail("Callback should not be called after unsubscribe")
+        }
+
+        model.$string.unsubscribe(by: self)
+
+        model.string = newValue
+        sleep(1)
+        waitForExpectations(timeout: 1.0)
+    }
+
+    func testUnsubscribeOnlyWithoutObject() {
+        let oldValue = "Old Value"
+        let newValue = "New Value"
+        let model = TestModel(string: oldValue)
+
+        let expectation = self.expectation(
+            description: "Callback should be called"
+        )
+
+        let token = model.$string.subscribe { _ in
+            XCTFail("Callback should not be called after unsubscribe")
+        }
+
+        model.$string.subscribe(by: self) { _, payload in
+            XCTAssertEqual(payload.old, oldValue)
+            XCTAssertEqual(payload.new, newValue)
+            expectation.fulfill()
+        }
+
+        model.$string.unsubscribe(by: token)
+
+        model.string = newValue
+        sleep(1)
+        waitForExpectations(timeout: 1.0)
+    }
+
     func testMultipleUnsubscribes() {
         let model = TestModel(string: "Initial")
 

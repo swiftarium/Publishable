@@ -21,15 +21,6 @@ public final class Publishable<Property> where Property: Equatable {
     public typealias AnyCallback = (_ subscriber: AnyObject?, _ changes: Changes) -> Void
     public typealias TokenProvider = () -> any SubscriptionToken
 
-    private struct WeakRef<T: AnyObject> {
-        weak var value: T?
-        var isAlive: Bool { value != nil }
-
-        init(_ value: T?) {
-            self.value = value
-        }
-    }
-
     private struct Subscription<Subscriber: AnyObject> {
         let token: (any SubscriptionToken)?
         let subscriber: WeakRef<Subscriber>
@@ -154,7 +145,7 @@ public final class Publishable<Property> where Property: Equatable {
     /// model.$value.unsubscribe(by: subscriber)
     /// ```
     public func unsubscribe<Subscriber: AnyObject>(by subscriber: Subscriber) {
-        subscriptions.removeAll { !$0.subscriber.isAlive || $0.subscriber.value === subscriber }
+        subscriptions.removeAll { !isValid(subscription: $0) || $0.subscriber == subscriber }
     }
 
     /// Unsubscribe using a token.
@@ -164,8 +155,8 @@ public final class Publishable<Property> where Property: Equatable {
     /// ```
     /// model.$value.unsubscribe(by: token)
     /// ```
-    public func unsubscribe(by token: any SubscriptionToken) {
-        subscriptions.removeAll { !$0.subscriber.isAlive || token.id == $0.token?.id }
+    public func unsubscribe<Token: SubscriptionToken>(by token: Token) {
+        subscriptions.removeAll { !isValid(subscription: $0) || token == $0.token }
     }
 
     /// Notify subscribers.
@@ -178,9 +169,13 @@ public final class Publishable<Property> where Property: Equatable {
     public func publish(_ changes: Changes? = nil) {
         let (old, new) = changes ?? (value, value)
         subscriptions = subscriptions.filter { subscription in
-            guard subscription.subscriber.isAlive || subscription.token != nil else { return false }
+            guard isValid(subscription: subscription) else { return false }
             subscription.callback(subscription.subscriber.value, (old, new))
             return true
         }
+    }
+
+    private func isValid(subscription: Subscription<AnyObject>) -> Bool {
+        return subscription.subscriber.value != nil || subscription.token != nil
     }
 }
