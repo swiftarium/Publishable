@@ -1,6 +1,6 @@
 # Publishable
 
-`Publishable` is a property wrapper designed to allow subscribers to listen for changes to a property, and be notified when changes occur. It's particularly useful when you want to implement reactive programming patterns, such as those seen in frameworks like Combine.
+`Publishable` is a property wrapper in Swift designed to enable seamless observation of property changes. Whether you're designing reactive UI components or need to monitor data changes, `Publishable` offers a simple and efficient way to keep track.
 
 ## Features
 
@@ -8,6 +8,7 @@
 - Notifies subscribers when a property changes.
 - Supports both class-based subscribers and simple subscribers.
 - Clears out deallocated class-based subscriptions automatically.
+- All operations, including property reads/writes and subscriber management, are thread-safe, courtesy of a dedicated dispatch queue.
 
 ## Installation
 
@@ -18,6 +19,14 @@ To install `Publishable` into your Xcode project using SPM, add it to the depend
 ```swift
 dependencies: [
     .package(url: "https://github.com/jinyongp/Publishable.git", from: "1.1.0"),
+]
+```
+
+And specify `"Publishable"` as a dependency of the Target in which you wish to use `Publishable`.
+
+```swift
+targets: [
+    .target(name: "YourTarget", dependencies: ["Publishable"]),
 ]
 ```
 
