@@ -201,12 +201,4 @@ public final class Publishable<Property> where Property: Equatable {
     func isValid(subscription: Subscription<AnyObject>) -> Bool {
         return subscription.subscriber.hasValue || subscription.token != nil
     }
-
-    func cleanUp() {
-        write {
-            subscriptions.update { collection in
-                collection = collection.filter(isValid)
-            }
-        }
-    }
 }
