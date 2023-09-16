@@ -1,3 +1,4 @@
+import Dispatch
 import WeakRef
 
 /// `Publishable` allows you to observe changes on properties.
@@ -23,29 +24,36 @@ public final class Publishable<Property> where Property: Equatable {
     public typealias AnyCallback = (_ subscriber: AnyObject?, _ changes: Changes) -> Void
     public typealias TokenProvider = () -> any SubscriptionToken
 
-    private struct Subscription<Subscriber: AnyObject> {
+    struct Subscription<Subscriber: AnyObject> {
         let token: (any SubscriptionToken)?
         let subscriber: WeakRef<Subscriber>
         let callback: AnyCallback
     }
 
-    private var value: Property
-    private var subscriptions: [Subscription<AnyObject>] = []
+    private(set) var value: Property
+    private(set) var subscriptions: [Subscription<AnyObject>] = []
+
+    private(set) var queue = DispatchQueue(label: "com.publishable.queue", attributes: .concurrent)
+    private(set) var semaphore = DispatchSemaphore(value: 1)
+    private func read<T>(_ action: () -> T) -> T { queue.sync { action() } }
+    private func write<T>(_ action: () -> T) -> T { queue.sync(flags: .barrier) { action() } }
 
     public var projectedValue: Publishable { self }
     public var wrappedValue: Property {
-        get { value }
+        get { read { value } }
         set {
-            let changes: Changes? = {
+            let changes: Changes? = write {
                 guard value != newValue else { return nil }
                 defer { value = newValue }
                 return (value, newValue)
-            }()
+            }
             if let changes { publish(changes) }
         }
     }
 
-    public init(wrappedValue: Property) { self.value = wrappedValue }
+    public init(wrappedValue: Property) {
+        self.value = wrappedValue
+    }
 
     /// Subscribe to changes using an object.
     /// - Parameters:
@@ -84,11 +92,13 @@ public final class Publishable<Property> where Property: Equatable {
             }
         }
 
-        subscriptions.append(.init(
-            token: nil,
-            subscriber: .init(subscriber),
-            callback: anyCallback
-        ))
+        write {
+            subscriptions.append(.init(
+                token: nil,
+                subscriber: .init(subscriber),
+                callback: anyCallback
+            ))
+        }
 
         if immediate, let subscriber {
             callback(subscriber, (value, value))
@@ -121,16 +131,16 @@ public final class Publishable<Property> where Property: Equatable {
         tokenProvider: TokenProvider? = nil,
         _ callback: @escaping (_ changes: Changes) -> Void
     ) -> any SubscriptionToken {
-        let anyCallback: AnyCallback = { _, changes in
-            callback(changes)
-        }
-
+        let anyCallback: AnyCallback = { callback($1) }
         let token = tokenProvider?() ?? DefaultToken()
-        subscriptions.append(.init(
-            token: token,
-            subscriber: .init(nil),
-            callback: anyCallback
-        ))
+
+        write {
+            subscriptions.append(.init(
+                token: token,
+                subscriber: .init(nil),
+                callback: anyCallback
+            ))
+        }
 
         if immediate {
             callback((value, value))
@@ -147,7 +157,7 @@ public final class Publishable<Property> where Property: Equatable {
     /// model.$value.unsubscribe(by: subscriber)
     /// ```
     public func unsubscribe<Subscriber: AnyObject>(by subscriber: Subscriber) {
-        subscriptions.removeAll { !isValid(subscription: $0) || $0.subscriber == subscriber }
+        write { subscriptions.removeAll { !isValid(subscription: $0) || $0.subscriber == subscriber } }
     }
 
     /// Unsubscribe using a token.
@@ -158,26 +168,28 @@ public final class Publishable<Property> where Property: Equatable {
     /// model.$value.unsubscribe(by: token)
     /// ```
     public func unsubscribe<Token: SubscriptionToken>(by token: Token) {
-        subscriptions.removeAll { !isValid(subscription: $0) || token == $0.token }
+        write { subscriptions.removeAll { !isValid(subscription: $0) || token == $0.token } }
     }
 
-    /// Notify subscribers.
-    /// - Parameter changes: The changes to publish. If not provided, the current value is used.
+    /// Notify subscribers manually.
     ///
     /// Example:
     /// ```
-    /// model.$value.publish()  // Notifies subscribers with the current value
+    /// model.$value.publish()
     /// ```
-    public func publish(_ changes: Changes? = nil) {
-        let (old, new) = changes ?? (value, value)
-        subscriptions = subscriptions.filter { subscription in
-            guard isValid(subscription: subscription) else { return false }
-            subscription.callback(subscription.subscriber.value, (old, new))
-            return true
+    public func publish() { publish((value, value)) }
+    func publish(_ changes: Changes) {
+        read { subscriptions }.forEach {
+            guard isValid(subscription: $0) else { return }
+            $0.callback($0.subscriber.value, changes)
         }
     }
 
-    private func isValid(subscription: Subscription<AnyObject>) -> Bool {
+    func isValid(subscription: Subscription<AnyObject>) -> Bool {
         return subscription.subscriber.hasValue || subscription.token != nil
+    }
+
+    func cleanUp() {
+        write { subscriptions = subscriptions.filter(isValid) }
     }
 }
