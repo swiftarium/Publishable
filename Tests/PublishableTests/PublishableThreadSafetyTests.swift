@@ -18,7 +18,6 @@ final class PublishableThreadSafetyTests: XCTestCase {
     }
 
     var model: TestModel!
-    var expect: XCTestExpectation!
 
     override func setUp() {
         super.setUp()
@@ -27,7 +26,7 @@ final class PublishableThreadSafetyTests: XCTestCase {
 
     func testConcurrentValueChanges() {
         let iterations = 100000
-        expect = expectation(description: "Waiting for all value changes to complete")
+        let expect = expectation(description: "Waiting for all value changes to complete")
 
         DispatchQueue.concurrentPerform(iterations: iterations) { iteration in
             model.number = iteration
@@ -43,27 +42,27 @@ final class PublishableThreadSafetyTests: XCTestCase {
 
     func testConcurrentSubscriptions() {
         let iterations = 100000
-        expect = expectation(description: "Waiting for all subscriptions to complete")
+        let expect = expectation(description: "Waiting for all subscriptions to complete")
 
         DispatchQueue.concurrentPerform(iterations: iterations) { _ in
             model.$number.subscribe { _ in }
 
-            if model.$number.subscriptions.count == iterations {
+            if model.$number.subscriptions.collection.count == iterations {
                 expect.fulfill()
             }
         }
 
         waitForExpectations(timeout: 2)
-        XCTAssertEqual(model.$number.subscriptions.count, iterations)
+        XCTAssertEqual(model.$number.subscriptions.collection.count, iterations)
     }
 
     func testConcurrentNotifications() {
         let iterations = 100000
-        expect = expectation(description: "Waiting for all notifications")
+        let expect = expectation(description: "Waiting for all notifications")
         expect.expectedFulfillmentCount = iterations
 
         model.$number.subscribe { _, _ in
-            self.expect.fulfill()
+            expect.fulfill()
         }
 
         DispatchQueue.concurrentPerform(iterations: iterations) { iteration in
