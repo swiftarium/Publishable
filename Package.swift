@@ -9,9 +9,10 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/swiftarium/WeakRef", from: "1.0.0"),
+        .package(url: "https://github.com/swiftarium/AutoCleaner", from: "1.0.0")
     ],
     targets: [
-        .target(name: "Publishable", dependencies: ["WeakRef"]),
+        .target(name: "Publishable", dependencies: ["WeakRef", "AutoCleaner"]),
         .testTarget(name: "PublishableTests", dependencies: ["Publishable"]),
     ]
 )

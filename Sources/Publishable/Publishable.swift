@@ -1,3 +1,4 @@
+import AutoCleaner
 import Dispatch
 import WeakRef
 
@@ -31,10 +32,9 @@ public final class Publishable<Property> where Property: Equatable {
     }
 
     private(set) var value: Property
-    private(set) var subscriptions: [Subscription<AnyObject>] = []
+    private(set) lazy var subscriptions = AutoCleaner([Subscription<AnyObject>]()) { !self.isValid(subscription: $0) }
 
     private(set) var queue = DispatchQueue(label: "com.publishable.queue", attributes: .concurrent)
-    private(set) var semaphore = DispatchSemaphore(value: 1)
     private func read<T>(_ action: () -> T) -> T { queue.sync { action() } }
     private func write<T>(_ action: () -> T) -> T { queue.sync(flags: .barrier) { action() } }
 
@@ -53,9 +53,15 @@ public final class Publishable<Property> where Property: Equatable {
 
     public init(wrappedValue: Property) {
         self.value = wrappedValue
+        subscriptions.start { count in
+            let interval = (min: 10.0, max: 120.0)
+            let rate = (interval.max - interval.min) / 100.0
+            let frequency = interval.max - (rate * Double(count))
+            return .seconds(Int(max(min(frequency, interval.max), interval.min)))
+        }
     }
 
-    /// Subscribe to changes using an object.
+    /// Subscribe to changes of the property using a subscriber object.
     /// - Parameters:
     ///   - subscriber: The object subscribing to the changes.
     ///   - immediate: If true, immediately calls the callback with the current value.
@@ -93,11 +99,13 @@ public final class Publishable<Property> where Property: Equatable {
         }
 
         write {
-            subscriptions.append(.init(
-                token: nil,
-                subscriber: .init(subscriber),
-                callback: anyCallback
-            ))
+            subscriptions.update { collection in
+                collection.append(.init(
+                    token: nil,
+                    subscriber: .init(subscriber),
+                    callback: anyCallback
+                ))
+            }
         }
 
         if immediate, let subscriber {
@@ -105,7 +113,7 @@ public final class Publishable<Property> where Property: Equatable {
         }
     }
 
-    /// Subscribe to changes.
+    /// Subscribe to changes of the property.
     /// - Parameters:
     ///   - immediate: If true, immediately calls the callback with the current value.
     ///   - callback: The function to be called when the property changes.
@@ -135,11 +143,13 @@ public final class Publishable<Property> where Property: Equatable {
         let token = tokenProvider?() ?? DefaultToken()
 
         write {
-            subscriptions.append(.init(
-                token: token,
-                subscriber: .init(nil),
-                callback: anyCallback
-            ))
+            subscriptions.update { collection in
+                collection.append(.init(
+                    token: token,
+                    subscriber: .init(nil),
+                    callback: anyCallback
+                ))
+            }
         }
 
         if immediate {
@@ -149,7 +159,7 @@ public final class Publishable<Property> where Property: Equatable {
         return token
     }
 
-    /// Unsubscribe using an object.
+    /// Unsubscribe a subscriber from observing the property changes.
     /// - Parameter subscriber: The subscriber to unsubscribe.
     ///
     /// Example:
@@ -157,7 +167,11 @@ public final class Publishable<Property> where Property: Equatable {
     /// model.$value.unsubscribe(by: subscriber)
     /// ```
     public func unsubscribe<Subscriber: AnyObject>(by subscriber: Subscriber) {
-        write { subscriptions.removeAll { !isValid(subscription: $0) || $0.subscriber == subscriber } }
+        write {
+            subscriptions.update { collection in
+                collection.removeAll { !isValid(subscription: $0) || $0.subscriber == subscriber }
+            }
+        }
     }
 
     /// Unsubscribe using a token.
@@ -168,18 +182,17 @@ public final class Publishable<Property> where Property: Equatable {
     /// model.$value.unsubscribe(by: token)
     /// ```
     public func unsubscribe<Token: SubscriptionToken>(by token: Token) {
-        write { subscriptions.removeAll { !isValid(subscription: $0) || token == $0.token } }
+        write {
+            subscriptions.update { collection in
+                collection.removeAll { !isValid(subscription: $0) || token == $0.token }
+            }
+        }
     }
 
-    /// Notify subscribers manually.
-    ///
-    /// Example:
-    /// ```
-    /// model.$value.publish()
-    /// ```
+    /// Manually notifies all subscribers of the current property value.
     public func publish() { publish((value, value)) }
     func publish(_ changes: Changes) {
-        read { subscriptions }.forEach {
+        read { subscriptions }.collection.forEach {
             guard isValid(subscription: $0) else { return }
             $0.callback($0.subscriber.value, changes)
         }
@@ -190,6 +203,10 @@ public final class Publishable<Property> where Property: Equatable {
     }
 
     func cleanUp() {
-        write { subscriptions = subscriptions.filter(isValid) }
+        write {
+            subscriptions.update { collection in
+                collection = collection.filter(isValid)
+            }
+        }
     }
 }
