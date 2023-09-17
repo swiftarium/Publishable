@@ -5,7 +5,7 @@ import WeakRef
 /// `Publishable` allows you to observe changes on properties.
 ///
 /// Example:
-/// ```
+/// ```swift
 /// class ExampleModel {
 ///     @Publishable var value: Int = 0
 /// }
@@ -68,7 +68,7 @@ public final class Publishable<Property> where Property: Equatable {
     ///   - callback: The function to be called when the property changes.
     ///
     /// Example:
-    /// ```
+    /// ```swift
     /// class ExampleModel {
     ///     @Publishable var value: Int = 0
     /// }
@@ -114,7 +114,7 @@ public final class Publishable<Property> where Property: Equatable {
     /// - Returns: A token representing the subscription, useful for unsubscribing.
     ///
     /// Example:
-    /// ```
+    /// ```swift
     /// class ExampleModel {
     ///     @Publishable var value: Int = 0
     /// }
@@ -154,7 +154,7 @@ public final class Publishable<Property> where Property: Equatable {
     /// - Parameter subscriber: The subscriber to unsubscribe.
     ///
     /// Example:
-    /// ```
+    /// ```swift
     /// model.$value.unsubscribe(by: subscriber)
     /// ```
     public func unsubscribe<Subscriber: AnyObject>(by subscriber: Subscriber) {
@@ -168,7 +168,7 @@ public final class Publishable<Property> where Property: Equatable {
     /// - Parameter token: The token for unsubscribing.
     ///
     /// Example:
-    /// ```
+    /// ```swift
     /// model.$value.unsubscribe(by: token)
     /// ```
     public func unsubscribe<Token: SubscriptionToken>(by token: Token) {

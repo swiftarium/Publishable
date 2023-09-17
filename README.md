@@ -1,28 +1,31 @@
 # Publishable
 
-`Publishable` is a property wrapper in Swift designed to enable seamless observation of property changes. Whether you're designing reactive UI components or need to monitor data changes, `Publishable` offers a simple and efficient way to keep track.
+[한글문서 KOREAN](/README_ko.md)
 
-## Features
+## Overview
 
-- Observes properties for changes.
-- Notifies subscribers when a property changes.
-- Supports both class-based subscribers and simple subscribers.
-- Clears out deallocated class-based subscriptions automatically.
-- All operations, including property reads/writes and subscriber management, are thread-safe, courtesy of a dedicated dispatch queue.
+`Publishable` is a Property Wrapper class that allows you to easily subscribe to and track changes in properties.
+
+## Key Features
+
+- Subscribe to property value changes and execute specific actions when changes occur.
+- Store subscriber objects with weak references to prevent memory leaks.
+- If a subscriber object is provided, the subscription will be automatically removed when the subscriber object is deallocated.
+- Provides a thread-safe implementation to prevent concurrency issues in multi-threaded environments.
 
 ## Installation
 
 ### Swift Package Manager
 
-To install `Publishable` into your Xcode project using SPM, add it to the dependencies value of your Package.swift:
+To install `Publishable` using SPM, add the following to the `dependencies` array in your `Package.swift`.
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/jinyongp/Publishable.git", from: "1.4.0"),
+    .package(url: "https://github.com/swiftarium/Publishable.git", from: "1.4.0"),
 ]
 ```
 
-And specify `"Publishable"` as a dependency of the Target in which you wish to use `Publishable`.
+Then, specify `"Publishable"` as a dependency for the target where you'll use it.
 
 ```swift
 targets: [
@@ -30,27 +33,37 @@ targets: [
 ]
 ```
 
-## Usage
+## API Reference
 
-### Basic Usage
+### Publishable
 
-Declare a property using the @Publishable property wrapper to make it observable:
+```swift
+// Subscribe to property changes.
+func subscribe(immediate: Bool, tokenProvider: TokenProvider?, (Changes) -> Void) -> any SubscriptionToken
+func subscribe<Subscriber>(by: Subscriber?, immediate: Bool, Callback<Subscriber>)
 
-```swift 
+// Unsubscribe from property changes.
+func unsubscribe<Token>(by: Token)
+func unsubscribe<Subscriber>(by: Subscriber)
+
+// Manually publish changes.
+func publish()
+```
+
+To subscribe changes to a specific property, apply the `@Publishable` wrapper to that property.
+
+```swift
 class MyModel {
     @Publishable var count: Int = 0
 }
 ```
 
-### Subscribing to Changes
-
-You can subscribe to changes in two ways:
-
-1. With a subscriber object:
+You can subscribe to a property with `@Publishable` using the `subscribe` method.
 
 ```swift
 let model = MyModel()
 
+// If you provide a subscriber object, the subscription will be automatically removed when the subscriber object is deallocated.
 class SubscriberClass {
     init() {
         model.$count.subscribe(by: self) { subscriber, changes in
@@ -62,9 +75,12 @@ class SubscriberClass {
 let subscriber = SubscriberClass()
 
 model.count = 5  // This will print: "Count changed from 0 to 5"
+
+// Unsubscribe from changes.
+model.$count.unsubscribe(by: subscriber)
 ```
 
-2. Using with a simple token for unsubscribes:
+If you don't provide a subscriber object, you will receive a token which you can use to unsubscribe.
 
 ```swift
 let token = model.$count.subscribe { changes in
@@ -72,38 +88,16 @@ let token = model.$count.subscribe { changes in
 }
 
 model.count = 10  // This will print: "Count changed from 5 to 10"
-```
 
-### Unsubscribing
-
-1. By a subscriber object:
-
-```swift
-model.$count.unsubscribe(by: subscriber)
-```
-
-2. Using a token:
-
-```swift
+// Unsubscribe from changes.
 model.$count.unsubscribe(by: token)
 ```
 
-### Publishing Changes:
-
-If you want to manually notify all subscribers of a change (e.g., for events or updates that aren't related to the property value):
-
-```swift
-model.$count.publish()  // Notifies subscribers with the current value
-```
-
-## Test
-
-To run the included tests, use the command:
+## Testing
 
 ```bash
 $ swift test
 ```
-
 
 ## License
 
