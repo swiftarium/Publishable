@@ -18,7 +18,7 @@ To install `Publishable` into your Xcode project using SPM, add it to the depend
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/jinyongp/Publishable.git", from: "1.1.0"),
+    .package(url: "https://github.com/jinyongp/Publishable.git", from: "1.4.0"),
 ]
 ```
 
