@@ -6,8 +6,8 @@
         "repositoryURL": "https://github.com/swiftarium/AutoCleaner",
         "state": {
           "branch": null,
-          "revision": "b3de42f45aca90ad5161a57997585305869f492b",
-          "version": "1.0.1"
+          "revision": "e2612fb66683b5e3b98053ca799527e6a8ab7684",
+          "version": "1.2.0"
         }
       },
       {
@@ -15,8 +15,8 @@
         "repositoryURL": "https://github.com/swiftarium/WeakRef",
         "state": {
           "branch": null,
-          "revision": "51b7f0a1878905b92cb9ddd586b2f6af0a2281d9",
-          "version": "1.0.0"
+          "revision": "b464717e3d6c47b63df96209f7ba2023d66b6c2e",
+          "version": "1.1.0"
         }
       }
     ]

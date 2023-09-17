@@ -9,13 +9,7 @@ final class PublishableThreadSafetyTests: XCTestCase {
         @Publishable var dict: [String: String] = [:]
     }
 
-    class TestSubscriber {
-        let name: String
-
-        init(name: String) {
-            self.name = name
-        }
-    }
+    class TestSubscriber {}
 
     var model: TestModel!
 
@@ -40,20 +34,101 @@ final class PublishableThreadSafetyTests: XCTestCase {
         XCTAssertEqual(model.number, iterations - 1)
     }
 
-    func testConcurrentSubscriptions() {
+    func testConcurrentSubscribesWithoutObject() {
         let iterations = 100000
-        let expect = expectation(description: "Waiting for all subscriptions to complete")
+        let expectIteration = expectation(description: "Waiting for iteration to complete")
+        expectIteration.expectedFulfillmentCount = iterations
+
+        let expect = expectation(description: "Waiting for all subscribes to complete")
+        expect.expectedFulfillmentCount = iterations
 
         DispatchQueue.concurrentPerform(iterations: iterations) { _ in
-            model.$number.subscribe { _ in }
-
-            if model.$number.subscriptions.collection.count == iterations {
+            model.$number.subscribe { _ in
                 expect.fulfill()
+            }
+            expectIteration.fulfill()
+        }
+
+        wait(for: [expectIteration])
+        sleep(2)
+
+        model.number = 1
+        wait(for: [expect], timeout: 2.0)
+    }
+
+    func testConcurrentSubscribesWithObject() {
+        let iterations = 1000
+
+        let expectIteration = expectation(description: "Waiting for iteration to complete")
+        expectIteration.expectedFulfillmentCount = iterations
+
+        let expect = expectation(description: "Waiting for all subscribes to complete")
+        expect.expectedFulfillmentCount = iterations
+
+        let subscribers = (1 ... iterations).map { _ in TestSubscriber() }
+        DispatchQueue.concurrentPerform(iterations: iterations) { iteration in
+            let subscriber = subscribers[iteration]
+            model.$number.subscribe(by: subscriber) { sub, _ in
+                XCTAssertIdentical(sub, subscriber)
+                expect.fulfill()
+            }
+            expectIteration.fulfill()
+        }
+
+        wait(for: [expectIteration])
+        sleep(2)
+
+        model.number = 1
+        wait(for: [expect], timeout: 2.0)
+    }
+    
+    func testConcurrentUnsubscribesWithoutObject() {
+        let iterations = 100000
+        let expectIteration = expectation(description: "Waiting for iteration to complete")
+        expectIteration.expectedFulfillmentCount = iterations
+
+        let tokens = (1...iterations).map { _ in
+            model.$number.subscribe { _ in
+                XCTFail("Callback should not be called")
             }
         }
 
-        waitForExpectations(timeout: 2)
-        XCTAssertEqual(model.$number.subscriptions.collection.count, iterations)
+        DispatchQueue.concurrentPerform(iterations: iterations) { iteration in
+            let token = tokens[iteration]
+            model.$number.unsubscribe(by: token)
+            expectIteration.fulfill()
+        }
+
+        wait(for: [expectIteration])
+        sleep(2)
+
+        model.number = 1
+        sleep(2)
+    }
+    
+    func testConcurrentUnsubscribesWithObject() {
+        let iterations = 100000
+        let expectIteration = expectation(description: "Waiting for iteration to complete")
+        expectIteration.expectedFulfillmentCount = iterations
+
+        let subscribers = (1...iterations).map { _ in TestSubscriber() }
+        subscribers.forEach { subscriber in
+            model.$number.subscribe(by: subscriber) { _, _ in
+                XCTFail("Callback should not be called")
+            }
+        }
+
+        DispatchQueue.concurrentPerform(iterations: iterations) { iteration in
+            let subscriber = subscribers[iteration]
+            model.$number.unsubscribe(by: subscriber)
+            expectIteration.fulfill()
+        }
+
+        wait(for: [expectIteration])
+        sleep(2)
+
+        model.number = 1
+        sleep(2)
     }
 
     func testConcurrentNotifications() {

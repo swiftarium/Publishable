@@ -25,14 +25,14 @@ public final class Publishable<Property> where Property: Equatable {
     public typealias AnyCallback = (_ subscriber: AnyObject?, _ changes: Changes) -> Void
     public typealias TokenProvider = () -> any SubscriptionToken
 
-    struct Subscription<Subscriber: AnyObject> {
-        let token: (any SubscriptionToken)?
-        let subscriber: WeakRef<Subscriber>
+    struct Subscription {
         let callback: AnyCallback
     }
 
     private(set) var value: Property
-    private(set) lazy var subscriptions = AutoCleaner([Subscription<AnyObject>]()) { !self.isValid(subscription: $0) }
+    private(set) lazy var subscriptions = AutoCleaner([SubscriptionIdentifier: Subscription]()) { element in
+        !element.key.isValid
+    }
 
     private(set) var queue = DispatchQueue(label: "com.publishable.queue", attributes: .concurrent)
     private func read<T>(_ action: () -> T) -> T { queue.sync { action() } }
@@ -93,23 +93,17 @@ public final class Publishable<Property> where Property: Equatable {
         _ callback: @escaping Callback<Subscriber>
     ) {
         let anyCallback: AnyCallback = { subscriber, changes in
-            if let subscriber = subscriber as? Subscriber {
-                callback(subscriber, changes)
-            }
-        }
-
-        write {
-            subscriptions.update { collection in
-                collection.append(.init(
-                    token: nil,
-                    subscriber: .init(subscriber),
-                    callback: anyCallback
-                ))
-            }
+            callback(subscriber as! Subscriber, changes)
         }
 
         if immediate, let subscriber {
             callback(subscriber, (value, value))
+        }
+
+        write {
+            let identifier: SubscriptionIdentifier = .subscriber(.init(subscriber))
+            let subscription: Subscription = .init(callback: anyCallback)
+            subscriptions.items.updateValue(subscription, forKey: identifier)
         }
     }
 
@@ -139,24 +133,21 @@ public final class Publishable<Property> where Property: Equatable {
         tokenProvider: TokenProvider? = nil,
         _ callback: @escaping (_ changes: Changes) -> Void
     ) -> any SubscriptionToken {
-        let anyCallback: AnyCallback = { callback($1) }
-        let token = tokenProvider?() ?? DefaultToken()
-
-        write {
-            subscriptions.update { collection in
-                collection.append(.init(
-                    token: token,
-                    subscriber: .init(nil),
-                    callback: anyCallback
-                ))
-            }
+        let anyCallback: AnyCallback = { _, changes in
+            callback(changes)
         }
 
         if immediate {
             callback((value, value))
         }
 
-        return token
+        return write {
+            let token = tokenProvider?() ?? DefaultToken()
+            let identifier: SubscriptionIdentifier = .token(token)
+            let subscription: Subscription = .init(callback: anyCallback)
+            subscriptions.items.updateValue(subscription, forKey: identifier)
+            return token
+        }
     }
 
     /// Unsubscribe a subscriber from observing the property changes.
@@ -168,9 +159,8 @@ public final class Publishable<Property> where Property: Equatable {
     /// ```
     public func unsubscribe<Subscriber: AnyObject>(by subscriber: Subscriber) {
         write {
-            subscriptions.update { collection in
-                collection.removeAll { !isValid(subscription: $0) || $0.subscriber == subscriber }
-            }
+            let identifier: SubscriptionIdentifier = .subscriber(.init(subscriber))
+            subscriptions.items.removeValue(forKey: identifier)
         }
     }
 
@@ -183,22 +173,23 @@ public final class Publishable<Property> where Property: Equatable {
     /// ```
     public func unsubscribe<Token: SubscriptionToken>(by token: Token) {
         write {
-            subscriptions.update { collection in
-                collection.removeAll { !isValid(subscription: $0) || token == $0.token }
-            }
+            let identifier: SubscriptionIdentifier = .token(token)
+            subscriptions.items.removeValue(forKey: identifier)
         }
     }
 
     /// Manually notifies all subscribers of the current property value.
     public func publish() { publish((value, value)) }
     func publish(_ changes: Changes) {
-        read { subscriptions }.collection.forEach {
-            guard isValid(subscription: $0) else { return }
-            $0.callback($0.subscriber.value, changes)
+        read {
+            subscriptions.clean()
+            return subscriptions.items
+        }.forEach { identifier, subscription in
+            guard identifier.isValid else { return }
+            switch identifier {
+            case .token: subscription.callback(nil, changes)
+            case let .subscriber(subscriber): subscription.callback(subscriber.value, changes)
+            }
         }
-    }
-
-    func isValid(subscription: Subscription<AnyObject>) -> Bool {
-        return subscription.subscriber.hasValue || subscription.token != nil
     }
 }
