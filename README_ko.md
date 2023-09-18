@@ -27,7 +27,7 @@ dependencies: [
 
 ```swift
 targets: [
-    .target(name: "YourTarget", dependencies: ["EventBus"]),
+    .target(name: "YourTarget", dependencies: ["Publishable"]),
 ]
 ```
 
