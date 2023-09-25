@@ -38,15 +38,16 @@ targets: [
 ### Publishable
 
 ```swift
-// Subscribe to property changes.
+/// Subscribe to property changes.
+/// immediate: If true, the callback will be called immediately after subscription. (default: false)
 func subscribe(immediate: Bool, tokenProvider: TokenProvider?, (Changes) -> Void) -> any SubscriptionToken
 func subscribe<Subscriber>(by: Subscriber?, immediate: Bool, Callback<Subscriber>)
 
-// Unsubscribe from property changes.
+/// Unsubscribe from property changes.
 func unsubscribe<Token>(by: Token)
 func unsubscribe<Subscriber>(by: Subscriber)
 
-// Manually publish changes.
+/// Manually publish changes.
 func publish()
 ```
 

@@ -2,7 +2,7 @@
 
 ## 개요
 
-`Publishable`은 Property Wrapper 클래스로 속성의 변경 구독하여 쉽게 추적할 수 있습니다.
+`Publishable`은 Property Wrapper 클래스로 속성의 변경을 구독하여 쉽게 추적할 수 있습니다.
 
 ## 주요 기능
 
@@ -36,15 +36,16 @@ targets: [
 ### Publishable
 
 ```swift
-// 속성의 변경을 구독합니다.
+/// 속성의 변경을 구독합니다.
+/// immediate: true로 설정하면 구독 시점에 콜백이 호출됩니다. (기본값: false)
 func subscribe(immediate: Bool, tokenProvider: TokenProvider?, (Changes) -> Void) -> any SubscriptionToken
 func subscribe<Subscriber>(by: Subscriber?, immediate: Bool, Callback<Subscriber>)
 
-// 구독을 해제합니다.
+/// 구독을 해제합니다.
 func unsubscribe<Token>(by: Token)
 func unsubscribe<Subscriber>(by: Subscriber)
 
-// 수동으로 변경을 발행합니다.
+/// 수동으로 변경을 발행합니다.
 func publish()
 ```
 
